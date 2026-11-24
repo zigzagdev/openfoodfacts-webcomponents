@@ -91,6 +91,24 @@ export class FolksonomyEditorRow extends LitElement {
   @property({ type: Boolean }) empty = false
 
   /**
+   * Keys already set on the product, used by the empty row to refuse a duplicate key.
+   */
+  @property({ attribute: false }) existingKeys: string[] = []
+
+  /**
+   * Whether a request to the API is in progress. Buttons are disabled meanwhile
+   * so that a double click does not send the request twice.
+   * @private
+   */
+  @state() private isSubmitting = false
+
+  /**
+   * Message shown to the user when an action fails or the input is invalid.
+   * @private
+   */
+  @state() private errorMessage = ""
+
+  /**
    * Indicates whether the row is editable.
    * @private
    */
@@ -145,6 +163,7 @@ export class FolksonomyEditorRow extends LitElement {
     const value = (e.target as HTMLInputElement).value
     this.keyInput = value
     this.key = value
+    this.errorMessage = ""
 
     if (e.detail.matching) {
       this.fetchValuesForKey(value)
@@ -160,6 +179,7 @@ export class FolksonomyEditorRow extends LitElement {
     const value = e.detail.value
     this.valueInput = value
     this.value = value
+    this.errorMessage = ""
 
     // In case of input value match exactly with only one suggestion, fetch values for the key
     if (e.detail.matching) {
@@ -215,11 +235,21 @@ export class FolksonomyEditorRow extends LitElement {
    * @private
    */
   private async handleSave() {
+    if (this.isSubmitting) {
+      return
+    }
+    const value = this.tempValue.trim()
+    if (!value) {
+      this.errorMessage = msg("Please enter a value.")
+      return
+    }
+    this.isSubmitting = true
+    this.errorMessage = ""
     try {
       const updatedProperty = await folksonomyApi.updateProductProperty(
         this.productCode,
         this.key,
-        this.tempValue,
+        value,
         this.version
       )
       this.editable = false
@@ -237,6 +267,9 @@ export class FolksonomyEditorRow extends LitElement {
       )
     } catch (error) {
       console.error("Failed to update property", error)
+      this.errorMessage = msg("Could not save the property. Please try again.")
+    } finally {
+      this.isSubmitting = false
     }
   }
 
@@ -247,6 +280,7 @@ export class FolksonomyEditorRow extends LitElement {
   private handleCancel() {
     this.editable = false
     this.tempValue = this.value
+    this.errorMessage = ""
   }
 
   /**
@@ -254,8 +288,16 @@ export class FolksonomyEditorRow extends LitElement {
    * @private
    */
   private async handleDelete() {
+    if (this.isSubmitting) {
+      return
+    }
     const deleteModal = document.createElement("delete-modal")
     deleteModal.addEventListener("confirm-delete", async () => {
+      if (this.isSubmitting) {
+        return
+      }
+      this.isSubmitting = true
+      this.errorMessage = ""
       try {
         await folksonomyApi.deleteProductProperty(this.productCode, this.key, this.version)
         this.dispatchEvent(
@@ -267,7 +309,9 @@ export class FolksonomyEditorRow extends LitElement {
         )
       } catch (error) {
         console.error("Failed to delete property", error)
+        this.errorMessage = msg("Could not delete the property. Please try again.")
       } finally {
+        this.isSubmitting = false
         deleteModal.remove()
       }
     })
@@ -279,26 +323,42 @@ export class FolksonomyEditorRow extends LitElement {
    * @private
    */
   private async addCustomKeyAndValue() {
-    if (this.keyInput && this.valueInput) {
-      try {
-        const newProperty = await folksonomyApi.addProductProperty(
-          this.productCode,
-          this.keyInput,
-          this.valueInput,
-          this.version
-        )
-        this.dispatchEvent(
-          new CustomEvent("add-row", {
-            detail: { key: newProperty.key, value: newProperty.value },
-            bubbles: true,
-            composed: true,
-          })
-        )
-        this.keyInput = ""
-        this.valueInput = ""
-      } catch (error) {
-        console.error("Failed to add custom key and value", error)
-      }
+    if (this.isSubmitting) {
+      return
+    }
+    const key = this.keyInput.trim()
+    const value = this.valueInput.trim()
+    if (!key || !value) {
+      this.errorMessage = msg("Please enter a key and a value.")
+      return
+    }
+    if (this.existingKeys.includes(key)) {
+      this.errorMessage = msg("This property already exists for this product. Edit it instead.")
+      return
+    }
+    this.isSubmitting = true
+    this.errorMessage = ""
+    try {
+      const newProperty = await folksonomyApi.addProductProperty(
+        this.productCode,
+        key,
+        value,
+        this.version
+      )
+      this.dispatchEvent(
+        new CustomEvent("add-row", {
+          detail: { key: newProperty.key, value: newProperty.value },
+          bubbles: true,
+          composed: true,
+        })
+      )
+      this.keyInput = ""
+      this.valueInput = ""
+    } catch (error) {
+      console.error("Failed to add custom key and value", error)
+      this.errorMessage = msg("Could not add the property. Please try again.")
+    } finally {
+      this.isSubmitting = false
     }
   }
 
@@ -309,6 +369,7 @@ export class FolksonomyEditorRow extends LitElement {
    */
   private handleInputChange(e: Event) {
     this.tempValue = (e.target as HTMLInputElement).value
+    this.errorMessage = ""
   }
 
   /**
@@ -364,6 +425,16 @@ export class FolksonomyEditorRow extends LitElement {
 
       .property-link {
         color: var(--off-folksonomy-text, black);
+      }
+
+      tr.error-row td {
+        padding-top: 0;
+        white-space: normal;
+      }
+
+      .error-message {
+        color: var(--off-folksonomy-danger, #c62828);
+        font-weight: 600;
       }
 
       #create-button {
@@ -446,6 +517,19 @@ export class FolksonomyEditorRow extends LitElement {
     }
   }
 
+  private renderError() {
+    if (!this.errorMessage) {
+      return null
+    }
+    return html`
+      <tr class="error-row ${this.rowNumber % 2 === 0 ? "even-row" : "odd-row"}">
+        <td colspan="3">
+          <span class="error-message" role="alert">${this.errorMessage}</span>
+        </td>
+      </tr>
+    `
+  }
+
   override render() {
     if (this.empty) {
       return html`
@@ -478,12 +562,14 @@ export class FolksonomyEditorRow extends LitElement {
                 class="button chocolate-button"
                 @click=${this.addCustomKeyAndValue}
                 id="create-button"
+                ?disabled=${this.isSubmitting}
               >
                 ${msg("Submit")}
               </button>
             </div>
           </td>
         </tr>
+        ${this.renderError()}
         ${
           this.showNewKeyModal
             ? html`<new-key-modal @close-modal=${this.handleCloseNewKeyModal}></new-key-modal>`
@@ -532,18 +618,34 @@ export class FolksonomyEditorRow extends LitElement {
                   ${
                     this.editable
                       ? html`
-                          <button class="button chocolate-button" @click=${this.handleSave}>
+                          <button
+                            class="button chocolate-button"
+                            @click=${this.handleSave}
+                            ?disabled=${this.isSubmitting}
+                          >
                             ${msg("Save")}
                           </button>
-                          <button class="button chocolate-button" @click=${this.handleCancel}>
+                          <button
+                            class="button chocolate-button"
+                            @click=${this.handleCancel}
+                            ?disabled=${this.isSubmitting}
+                          >
                             ${msg("Cancel")}
                           </button>
                         `
-                      : html`<button class="button chocolate-button" @click=${this.handleEdit}>
+                      : html`<button
+                          class="button chocolate-button"
+                          @click=${this.handleEdit}
+                          ?disabled=${this.isSubmitting}
+                        >
                           ${msg("Edit")}
                         </button>`
                   }
-                  <button class="button chocolate-button" @click=${this.handleDelete}>
+                  <button
+                    class="button chocolate-button"
+                    @click=${this.handleDelete}
+                    ?disabled=${this.isSubmitting}
+                  >
                     ${msg("Delete")}
                   </button>
                 </div>
@@ -551,6 +653,7 @@ export class FolksonomyEditorRow extends LitElement {
             : null
         }
       </tr>
+      ${this.renderError()}
       ${
         this.showNewKeyModal
           ? html`<new-key-modal @close-modal=${this.handleCloseNewKeyModal}></new-key-modal>`

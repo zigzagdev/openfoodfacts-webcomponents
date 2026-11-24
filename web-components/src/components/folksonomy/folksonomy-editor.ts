@@ -181,7 +181,9 @@ export class FolksonomyEditor extends LitElement {
   private handleRowAdd(event: CustomEvent) {
     const { key, value } = event.detail
     if (key && value) {
-      this.properties = [...this.properties, { key, value, version: 1 }]
+      // A key is unique per product: never list it twice.
+      const others = this.properties.filter((property) => property.key !== key)
+      this.properties = [...others, { key, value, version: 1 }]
       this.sortProperties()
     } else {
       console.error("Key or value is missing in the event detail.")
@@ -308,6 +310,7 @@ export class FolksonomyEditor extends LitElement {
                   product-code=${this.productCode}
                   page-type=${this.pageType}
                   row-number=${this.properties.length + 1}
+                  .existingKeys=${this.properties.map((property) => property.key)}
                   empty
                 ></folksonomy-editor-row>`
               : null

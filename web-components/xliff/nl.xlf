@@ -1110,6 +1110,24 @@
         <source><x id="0" equiv-text="${amount}"/> a month keeps it that way.</source>
         <target state="needs-translation"><x id="0" equiv-text="${amount}"/> a month keeps it that way.</target>
       </trans-unit>
+<trans-unit id="s93fab9513e4031c7">
+  <source>Please enter a value.</source>
+</trans-unit>
+<trans-unit id="s90f0353b1017c921">
+  <source>Could not save the property. Please try again.</source>
+</trans-unit>
+<trans-unit id="sca889d65e292009f">
+  <source>Could not delete the property. Please try again.</source>
+</trans-unit>
+<trans-unit id="sd5f39be9c479da7c">
+  <source>Please enter a key and a value.</source>
+</trans-unit>
+<trans-unit id="s4664807cb13be281">
+  <source>This property already exists for this product. Edit it instead.</source>
+</trans-unit>
+<trans-unit id="sfa206a01e31ff025">
+  <source>Could not add the property. Please try again.</source>
+</trans-unit>
     </body>
   </file>
 </xliff>
